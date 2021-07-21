@@ -1074,6 +1074,14 @@ class InputBoxWrapper extends ComponentWrapper implements azdata.InputBoxCompone
 		this.setProperty('validationErrorMessage', v);
 	}
 
+	public get maxLength(): number | undefined {
+		return this.properties['maxLength'];
+	}
+
+	public set maxLength(v: number | undefined) {
+		this.setProperty('maxLength', v);
+	}
+
 	public get onTextChanged(): vscode.Event<any> {
 		let emitter = this._emitterMap.get(ComponentEventType.onDidChange);
 		return emitter && emitter.event;
@@ -1362,6 +1370,13 @@ class TextComponentWrapper extends ComponentWrapper implements azdata.TextCompon
 	public set requiredIndicator(requiredIndicator: boolean) {
 		this.setProperty('requiredIndicator', requiredIndicator);
 	}
+
+	public get headingLevel(): azdata.HeadingLevel | undefined {
+		return this.properties['headingLevel'];
+	}
+	public set headingLevel(headingLevel: azdata.HeadingLevel | undefined) {
+		this.setProperty('headingLevel', headingLevel);
+	}
 }
 
 class ImageComponentWrapper extends ComponentWithIconWrapper implements azdata.ImageComponentProperties {
@@ -1536,7 +1551,7 @@ class DeclarativeTableWrapper extends ComponentWrapper implements azdata.Declara
 		super(proxy, handle, ModelComponentTypes.DeclarativeTable, id, logService);
 		this.properties = {};
 		this._emitterMap.set(ComponentEventType.onDidChange, new Emitter<any>());
-		this._emitterMap.set(ComponentEventType.onDidClick, new Emitter<any>());
+		this._emitterMap.set(ComponentEventType.onSelectedRowChanged, new Emitter<azdata.DeclarativeTableRowSelectedEvent>());
 
 	}
 
@@ -1560,6 +1575,11 @@ class DeclarativeTableWrapper extends ComponentWrapper implements azdata.Declara
 		});
 	}
 
+	async setDataValues(v: azdata.DeclarativeTableCellValue[][]): Promise<void> {
+		await this.clearItems();
+		await this.setProperty('dataValues', v);
+	}
+
 	public get columns(): azdata.DeclarativeTableColumn[] {
 		return this.properties['columns'];
 	}
@@ -1573,12 +1593,12 @@ class DeclarativeTableWrapper extends ComponentWrapper implements azdata.Declara
 		return emitter && emitter.event;
 	}
 
-	public get onRowSelected(): vscode.Event<any> {
-		let emitter = this._emitterMap.get(ComponentEventType.onDidClick);
+	public get onRowSelected(): vscode.Event<azdata.DeclarativeTableRowSelectedEvent> {
+		let emitter = this._emitterMap.get(ComponentEventType.onSelectedRowChanged);
 		return emitter && emitter.event;
 	}
 
-	protected notifyPropertyChanged(): Thenable<void> {
+	protected override notifyPropertyChanged(): Thenable<void> {
 		return this._proxy.$setProperties(this._handle, this._id, this.getPropertiesForMainThread());
 	}
 
@@ -1594,7 +1614,15 @@ class DeclarativeTableWrapper extends ComponentWrapper implements azdata.Declara
 		this._proxy.$doAction(this._handle, this._id, ModelViewAction.Filter, rowIndexes);
 	}
 
-	public toComponentShape(): IComponentShape {
+	public get selectedRow(): number {
+		return this.properties['selectedRow'] ?? -1;
+	}
+
+	public set selectedRow(v: number) {
+		this.setProperty('selectedRow', v);
+	}
+
+	public override toComponentShape(): IComponentShape {
 		// Overridden to ensure we send the correct properties mapping.
 		return <IComponentShape>{
 			id: this.id,
@@ -1694,6 +1722,13 @@ class ButtonWrapper extends ComponentWithIconWrapper implements azdata.ButtonCom
 	}
 	public set label(v: string) {
 		this.setProperty('label', v);
+	}
+
+	public get fileType(): string {
+		return this.properties['fileType'];
+	}
+	public set fileType(v: string) {
+		this.setProperty('fileType', v);
 	}
 
 	public get onDidClick(): vscode.Event<any> {

@@ -54,10 +54,8 @@ describe('Notebook URI Handler', function (): void {
 	});
 
 	it('should show error message when no query passed into open', async function (): Promise<void> {
-		let showQuickPickStub = sinon.stub(vscode.window, 'showQuickPick').resolves(Promise.resolve(loc.msgYes) as any);
 		await notebookUriHandler.handleUri(vscode.Uri.parse('azuredatastudio://microsoft.notebook/open'));
 
-		sinon.assert.calledOnce(showQuickPickStub);
 		sinon.assert.calledOnce(showErrorMessageSpy);
 	});
 
@@ -122,12 +120,18 @@ describe('Notebook URI Handler', function (): void {
 	});
 
 	it('should open notebook when file uri is valid', async function (): Promise<void> {
-		let showQuickPickStub = sinon.stub(vscode.window, 'showQuickPick').resolves(Promise.resolve(loc.msgYes) as any);
 		let notebookDir: string = path.join(os.tmpdir(), `notebook_${uuid.v4()}`);
 		let notebookPath: string = path.join(notebookDir, 'hello.ipynb');
 
 		await fs.mkdir(notebookDir);
-		let fileURI = 'azuredatastudio://microsoft.notebook/open?url=file://' + notebookPath;
+		let baseUrl = 'azuredatastudio://microsoft.notebook/open?url=file://';
+		if (process.platform === constants.winPlatform) {
+			// URI paths are formatted as "hostname/path", but since we're using a local path
+			// we omit the host part and just add the slash. Unix paths already start with a
+			// forward slash, but we have to prepend it manually when using Windows paths.
+			baseUrl = baseUrl + '/';
+		}
+		let fileURI = baseUrl + notebookPath;
 		let fileNotebookUri = vscode.Uri.parse(fileURI);
 		let notebookContent: azdata.nb.INotebookContents = {
 			cells: [{
@@ -151,7 +155,6 @@ describe('Notebook URI Handler', function (): void {
 
 		await notebookUriHandler.handleUri(fileNotebookUri);
 
-		sinon.assert.calledOnce(showQuickPickStub);
 		sinon.assert.calledWith(showNotebookDocumentStub, sinon.match.any, sinon.match({ initialContent: notebookContent }));
 		sinon.assert.callCount(showErrorMessageSpy, 0);
 	});

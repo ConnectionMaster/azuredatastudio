@@ -3,7 +3,7 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as azdata from 'azdata';
+import type * as azdataType from 'azdata';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { DialogBase } from './dialogBase';
@@ -20,9 +20,13 @@ class NewProjectDialogModel {
 	projectFileExtension: string = '';
 	name: string = '';
 	location: string = '';
+	targetPlatform?: string;
 }
+
 export class NewProjectDialog extends DialogBase {
 	public model: NewProjectDialogModel = new NewProjectDialogModel();
+	public formBuilder: azdataType.FormBuilder | undefined;
+	public targetPlatformDropdownFormComponent: azdataType.FormComponent | undefined;
 
 	constructor(private workspaceService: IWorkspaceService) {
 		super(constants.NewProjectDialogTitle, 'NewProject', constants.CreateButtonText);
@@ -49,11 +53,9 @@ export class NewProjectDialog extends DialogBase {
 				return false;
 			}
 
-			if (this.workspaceInputBox!.enabled) {
-				const sameFolderAsNewProject = path.join(this.model.location, this.model.name) === path.dirname(this.workspaceInputBox!.value!);
-				await this.validateNewWorkspace(sameFolderAsNewProject);
+			if (await this.workspaceService.validateWorkspace() === false) {
+				return false;
 			}
-
 			return true;
 		}
 		catch (err) {
@@ -62,17 +64,14 @@ export class NewProjectDialog extends DialogBase {
 		}
 	}
 
-	async onComplete(): Promise<void> {
+	override async onComplete(): Promise<void> {
 		try {
-			const validateWorkspace = await this.workspaceService.validateWorkspace();
 
 			TelemetryReporter.createActionEvent(TelemetryViews.NewProjectDialog, TelemetryActions.NewProjectDialogCompleted)
-				.withAdditionalProperties({ projectFileExtension: this.model.projectFileExtension, projectTemplateId: this.model.projectTypeId, workspaceValidationPassed: validateWorkspace.toString() })
+				.withAdditionalProperties({ projectFileExtension: this.model.projectFileExtension, projectTemplateId: this.model.projectTypeId })
 				.send();
 
-			if (validateWorkspace) {
-				await this.workspaceService.createProject(this.model.name, vscode.Uri.file(this.model.location), this.model.projectTypeId, vscode.Uri.file(this.workspaceInputBox!.value!));
-			}
+			await this.workspaceService.createProject(this.model.name, vscode.Uri.file(this.model.location), this.model.projectTypeId, this.model.targetPlatform);
 		}
 		catch (err) {
 
@@ -84,11 +83,11 @@ export class NewProjectDialog extends DialogBase {
 		}
 	}
 
-	protected async initialize(view: azdata.ModelView): Promise<void> {
+	protected async initialize(view: azdataType.ModelView): Promise<void> {
 		const allProjectTypes = await this.workspaceService.getAllProjectTypes();
-		const projectTypeRadioCardGroup = view.modelBuilder.radioCardGroup().withProperties<azdata.RadioCardGroupComponentProperties>({
+		const projectTypeRadioCardGroup = view.modelBuilder.radioCardGroup().withProps({
 			cards: allProjectTypes.map((projectType: IProjectType) => {
-				return <azdata.RadioCard>{
+				return <azdataType.RadioCard>{
 					id: projectType.id,
 					label: projectType.displayName,
 					icon: projectType.icon,
@@ -117,9 +116,22 @@ export class NewProjectDialog extends DialogBase {
 
 		this.register(projectTypeRadioCardGroup.onSelectionChanged((e) => {
 			this.model.projectTypeId = e.cardId;
+			const selectedProject = allProjectTypes.find(p => p.id === e.cardId);
+
+			if (selectedProject?.targetPlatforms) {
+				// update the target platforms dropdown for the selected project type
+				targetPlatformDropdown.values = selectedProject?.targetPlatforms;
+				targetPlatformDropdown.value = this.getDefaultTargetPlatform(selectedProject);
+
+				this.formBuilder?.addFormItem(this.targetPlatformDropdownFormComponent!);
+			} else {
+				// remove the target version dropdown if the selected project type didn't provide values for this
+				this.formBuilder?.removeFormItem(this.targetPlatformDropdownFormComponent!);
+				this.model.targetPlatform = undefined;
+			}
 		}));
 
-		const projectNameTextBox = view.modelBuilder.inputBox().withProperties<azdata.InputBoxProperties>({
+		const projectNameTextBox = view.modelBuilder.inputBox().withProps({
 			ariaLabel: constants.ProjectNameTitle,
 			placeHolder: constants.ProjectNamePlaceholder,
 			required: true,
@@ -129,11 +141,9 @@ export class NewProjectDialog extends DialogBase {
 		this.register(projectNameTextBox.onTextChanged(() => {
 			this.model.name = projectNameTextBox.value!;
 			projectNameTextBox.updateProperty('title', projectNameTextBox.value);
-
-			this.updateWorkspaceInputbox(path.join(this.model.location, this.model.name), this.model.name);
 		}));
 
-		const locationTextBox = view.modelBuilder.inputBox().withProperties<azdata.InputBoxProperties>({
+		const locationTextBox = view.modelBuilder.inputBox().withProps({
 			ariaLabel: constants.ProjectLocationTitle,
 			placeHolder: constants.ProjectLocationPlaceholder,
 			required: true,
@@ -143,10 +153,9 @@ export class NewProjectDialog extends DialogBase {
 		this.register(locationTextBox.onTextChanged(() => {
 			this.model.location = locationTextBox.value!;
 			locationTextBox.updateProperty('title', locationTextBox.value);
-			this.updateWorkspaceInputbox(path.join(this.model.location, this.model.name), this.model.name);
 		}));
 
-		const browseFolderButton = view.modelBuilder.button().withProperties<azdata.ButtonProperties>({
+		const browseFolderButton = view.modelBuilder.button().withProps({
 			ariaLabel: constants.BrowseButtonText,
 			iconPath: IconPathHelper.folder,
 			height: '16px',
@@ -165,13 +174,28 @@ export class NewProjectDialog extends DialogBase {
 			const selectedFolder = folderUris[0].fsPath;
 			locationTextBox.value = selectedFolder;
 			this.model.location = selectedFolder;
-
-			this.updateWorkspaceInputbox(path.join(this.model.location, this.model.name), this.model.name);
 		}));
 
-		this.createWorkspaceContainer(view);
+		const targetPlatformDropdown = view.modelBuilder.dropDown().withProps({
+			values: allProjectTypes[0].targetPlatforms,
+			value: this.getDefaultTargetPlatform(allProjectTypes[0]),
+			ariaLabel: constants.TargetPlatform,
+			required: true,
+			width: constants.DefaultInputWidth
+		}).component();
 
-		const form = view.modelBuilder.formContainer().withFormItems([
+		this.register(targetPlatformDropdown.onValueChanged(() => {
+			this.model.targetPlatform = targetPlatformDropdown.value! as string;
+		}));
+
+
+		this.targetPlatformDropdownFormComponent = {
+			title: constants.TargetPlatform,
+			required: true,
+			component: targetPlatformDropdown
+		};
+
+		this.formBuilder = view.modelBuilder.formContainer().withFormItems([
 			{
 				title: constants.TypeTitle,
 				required: true,
@@ -181,15 +205,34 @@ export class NewProjectDialog extends DialogBase {
 				title: constants.ProjectNameTitle,
 				required: true,
 				component: this.createHorizontalContainer(view, [projectNameTextBox])
-			}, {
+			},
+			{
 				title: constants.ProjectLocationTitle,
 				required: true,
 				component: this.createHorizontalContainer(view, [locationTextBox, browseFolderButton])
-			},
-			this.workspaceDescriptionFormComponent!,
-			this.workspaceInputFormComponent!
-		]).component();
-		await view.initializeModel(form);
+			}
+		]);
+
+		// add version dropdown if the first project type has one
+		if (allProjectTypes[0].targetPlatforms) {
+			this.formBuilder.addFormItem(this.targetPlatformDropdownFormComponent);
+		}
+
+		await view.initializeModel(this.formBuilder.component());
 		this.initDialogComplete?.resolve();
+	}
+
+	/**
+	 * Gets the default target platform of the project type if there is one
+	 * @param projectType
+	 * @returns
+	 */
+	getDefaultTargetPlatform(projectType: IProjectType): string | undefined {
+		// only return the specified default target platform if it's also included in the project type's array of target platforms
+		if (projectType.defaultTargetPlatform && projectType.targetPlatforms?.includes(projectType.defaultTargetPlatform)) {
+			return projectType.defaultTargetPlatform;
+		} else {
+			return undefined;
+		}
 	}
 }

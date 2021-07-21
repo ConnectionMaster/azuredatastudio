@@ -12,7 +12,7 @@ import * as os from 'os';
 import * as templates from '../templates/templates';
 
 import { Uri, window } from 'vscode';
-import { IFileProjectEntry, ISqlProject } from 'sqldbproj';
+import { IFileProjectEntry, ISqlProject, SqlTargetPlatform } from 'sqldbproj';
 import { promises as fs } from 'fs';
 import { DataSource } from './dataSources/dataSources';
 import { ISystemDatabaseReferenceSettings, IDacpacReferenceSettings, IProjectReferenceSettings } from './IDatabaseReferenceSettings';
@@ -441,6 +441,13 @@ export class Project implements ISqlProject {
 	 */
 	public async changeTargetPlatform(compatLevel: string): Promise<void> {
 		if (this.getProjectTargetVersion() !== compatLevel) {
+			TelemetryReporter.createActionEvent(TelemetryViews.ProjectTree, TelemetryActions.changePlatformType)
+				.withAdditionalProperties({
+					from: this.getProjectTargetVersion(),
+					to: compatLevel
+				})
+				.send();
+
 			const newDSP = `${constants.MicrosoftDatatoolsSchemaSqlSql}${compatLevel}${constants.databaseSchemaProvider}`;
 			this.projFileXmlDoc.getElementsByTagName(constants.DSP)[0].childNodes[0].data = newDSP;
 			this.projFileXmlDoc.getElementsByTagName(constants.DSP)[0].childNodes[0].nodeValue = newDSP;
@@ -462,13 +469,6 @@ export class Project implements ISqlProject {
 			}
 
 			await this.serializeToProjFile(this.projFileXmlDoc);
-
-			TelemetryReporter.createActionEvent(TelemetryViews.ProjectTree, TelemetryActions.changePlatformType)
-				.withAdditionalProperties({
-					from: this.getProjectTargetVersion(),
-					to: compatLevel
-				})
-				.send();
 		}
 	}
 
@@ -498,28 +498,48 @@ export class Project implements ISqlProject {
 	}
 
 	public getSystemDacpacUri(dacpac: string): Uri {
-		let version = this.getProjectTargetVersion();
-		return Uri.parse(path.join('$(NETCoreTargetsPath)', 'SystemDacpacs', version, dacpac));
+		const versionFolder = this.getSystemDacpacFolderName();
+		return Uri.parse(path.join('$(NETCoreTargetsPath)', 'SystemDacpacs', versionFolder, dacpac));
 	}
 
 	public getSystemDacpacSsdtUri(dacpac: string): Uri {
-		let version = this.getProjectTargetVersion();
-		return Uri.parse(path.join('$(DacPacRootPath)', 'Extensions', 'Microsoft', 'SQLDB', 'Extensions', 'SqlServer', version, 'SqlSchemas', dacpac));
+		const versionFolder = this.getSystemDacpacFolderName();
+		return Uri.parse(path.join('$(DacPacRootPath)', 'Extensions', 'Microsoft', 'SQLDB', 'Extensions', 'SqlServer', versionFolder, 'SqlSchemas', dacpac));
 	}
 
+	public getSystemDacpacFolderName(): string {
+		const version = this.getProjectTargetVersion();
+
+		// DW is special because the target version is DW, but the folder name for system dacpacs is AzureDW in SSDT
+		// the other target versions have the same version name and folder name
+		return version === constants.targetPlatformToVersion.get(SqlTargetPlatform.sqlDW) ? constants.AzureDwFolder : version;
+	}
+
+	/**
+	 * Gets the project target version specified in the DSP property in the sqlproj
+	 */
 	public getProjectTargetVersion(): string {
-		// check for invalid DSP
-		if (this.projFileXmlDoc.getElementsByTagName(constants.DSP).length !== 1 || this.projFileXmlDoc.getElementsByTagName(constants.DSP)[0].childNodes.length !== 1) {
+		let dsp: string | undefined;
+
+		try {
+			dsp = this.evaluateProjectPropertyValue(constants.DSP);
+		}
+		catch {
+			// We will throw specialized error instead
+		}
+
+		// Check if DSP is missing or invalid
+		if (!dsp) {
 			throw new Error(constants.invalidDataSchemaProvider);
 		}
 
-		let dsp: string = this.projFileXmlDoc.getElementsByTagName(constants.DSP)[0].childNodes[0].data;
-
 		// get version from dsp, which is a string like Microsoft.Data.Tools.Schema.Sql.Sql130DatabaseSchemaProvider
-		// remove part before the number
-		let version: any = dsp.substring(constants.MicrosoftDatatoolsSchemaSqlSql.length);
-		// remove DatabaseSchemaProvider
-		version = version.substring(0, version.length - constants.databaseSchemaProvider.length);
+		// Remove prefix and suffix to only get the actual version number/name. For the example above the result
+		// should be just '130'.
+		const version =
+			dsp.substring(
+				constants.MicrosoftDatatoolsSchemaSqlSql.length,
+				dsp.length - constants.databaseSchemaProvider.length);
 
 		// make sure version is valid
 		if (!Array.from(constants.targetPlatformToVersion.values()).includes(version)) {
@@ -527,6 +547,15 @@ export class Project implements ISqlProject {
 		}
 
 		return version;
+	}
+
+	/**
+	 * Gets the default database collation set in the project.
+	 *
+	 * @returns Default collation for the database set in the project.
+	 */
+	public getDatabaseDefaultCollation(): string {
+		return this.evaluateProjectPropertyValue(constants.DefaultCollationProperty, constants.DefaultCollation);
 	}
 
 	/**
@@ -1031,6 +1060,52 @@ export class Project implements ISqlProject {
 			}
 		}
 	}
+
+	/**
+	 * Evaluates the value of the property item in the loaded project.
+	 *
+	 * @param propertyName Name of the property item to evaluate.
+	 * @returns Value of the property or `undefined`, if property is missing.
+	 */
+	private evaluateProjectPropertyValue(propertyName: string): string | undefined;
+
+	/**
+	 * Evaluates the value of the property item in the loaded project.
+	 *
+	 * @param propertyName Name of the property item to evaluate.
+	 * @param defaultValue Default value to return, if property is not set.
+	 * @returns Value of the property or `defaultValue`, if property is missing.
+	 */
+	private evaluateProjectPropertyValue(propertyName: string, defaultValue: string): string;
+
+	/**
+	 * Evaluates the value of the property item in the loaded project.
+	 *
+	 * @param propertyName Name of the property item to evaluate.
+	 * @param defaultValue Default value to return, if property is not set.
+	 * @returns Value of the property or `defaultValue`, if property is missing.
+	 */
+	private evaluateProjectPropertyValue(propertyName: string, defaultValue?: string): string | undefined {
+		// TODO: Currently we simply read the value of the first matching element. The code should be updated to:
+		//       1) Narrow it down to items under <PropertyGroup> only
+		//       2) Respect the `Condition` attribute on group and property itself
+		//       3) Evaluate any expressions within the property value
+
+		// Check if property is set in the project
+		const propertyElements = this.projFileXmlDoc.getElementsByTagName(propertyName);
+		if (propertyElements.length === 0) {
+			return defaultValue;
+		}
+
+		// Try to extract the value from the first matching element
+		const firstPropertyElement = propertyElements[0];
+		if (firstPropertyElement.childNodes.length !== 1) {
+			// Property items are expected to have simple string content
+			throw new Error(constants.invalidProjectPropertyValue(propertyName));
+		}
+
+		return firstPropertyElement.childNodes[0].data;
+	}
 }
 
 /**
@@ -1059,7 +1134,7 @@ export class FileProjectEntry extends ProjectEntry implements IFileProjectEntry 
 		this.sqlObjectType = sqlObjectType;
 	}
 
-	public toString(): string {
+	public override toString(): string {
 		return this.fsUri.path;
 	}
 
@@ -1101,7 +1176,7 @@ export class DacpacReferenceProjectEntry extends FileProjectEntry implements IDa
 		return path.parse(utils.getPlatformSafeFileEntryPath(this.fsUri.fsPath)).name;
 	}
 
-	public pathForSqlProj(): string {
+	public override pathForSqlProj(): string {
 		// need to remove the leading slash from path for build to work
 		return utils.convertSlashesForSqlProj(this.fsUri.path.substring(1));
 	}
@@ -1119,7 +1194,7 @@ export class SystemDatabaseReferenceProjectEntry extends FileProjectEntry implem
 		return path.parse(utils.getPlatformSafeFileEntryPath(this.fsUri.fsPath)).name;
 	}
 
-	public pathForSqlProj(): string {
+	public override pathForSqlProj(): string {
 		// need to remove the leading slash for system database path for build to work on Windows
 		return utils.convertSlashesForSqlProj(this.fsUri.path.substring(1));
 	}
@@ -1154,7 +1229,7 @@ export class SqlProjectReferenceProjectEntry extends FileProjectEntry implements
 		return this.projectName;
 	}
 
-	public pathForSqlProj(): string {
+	public override pathForSqlProj(): string {
 		// need to remove the leading slash from path for build to work on Windows
 		return utils.convertSlashesForSqlProj(this.fsUri.path.substring(1));
 	}

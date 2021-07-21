@@ -7,9 +7,12 @@ text-cell-component {
 	display: block;
 }
 text-cell-component .notebook-text {
-	display: flex;
+	display: inline-block;
 	outline: none;
 	min-height: 50px;
+}
+text-cell-component .notebook-text.show-preview.show-markdown{
+	display: flex;
 }
 text-cell-component code-component {
 	flex-direction: column;
@@ -19,7 +22,6 @@ text-cell-component .notebook-preview {
 	padding-left: 8px;
 	padding-right: 8px;
 	user-select: none;
-	width: 100%;
 	outline: none;
 	padding-top: 14px;
 }

@@ -47,7 +47,7 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 
 	private readonly _azdataApi: azdataExt.IExtension;
 
-	constructor(protected modelView: azdata.ModelView, dashboard: azdata.window.ModelViewDashboard, private _postgresModel: PostgresModel) {
+	constructor(modelView: azdata.ModelView, dashboard: azdata.window.ModelViewDashboard, private _postgresModel: PostgresModel) {
 		super(modelView, dashboard);
 		this._azdataApi = vscode.extensions.getExtension(azdataExt.extension.name)?.exports;
 
@@ -244,9 +244,17 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 		// Worker node count
 		this.workerCountBox = this.modelView.modelBuilder.inputBox().withProps({
 			readOnly: false,
+			min: 0,
 			inputType: 'number',
 			placeHolder: loc.loading,
-			required: true
+			required: true,
+			ariaLabel: loc.workerNodeCount,
+			validationErrorMessage: loc.workerOneNodeValidationMessage
+		}).withValidation((component) => {
+			if (component.value === '1') {
+				return false;
+			}
+			return true;
 		}).component();
 
 		this.disposables.push(
@@ -264,7 +272,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 1,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.workerCoresRequest
 		}).component();
 
 		this.disposables.push(
@@ -284,7 +293,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 1,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.workerCoresLimit
 		}).component();
 
 		this.disposables.push(
@@ -304,7 +314,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 0.25,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.workerMemoryRequest
 		}).component();
 
 		this.disposables.push(
@@ -324,7 +335,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 0.25,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.workerMemoryLimit
 		}).component();
 
 		this.disposables.push(
@@ -344,7 +356,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 1,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.coordinatorCoresRequest
 		}).component();
 
 		this.disposables.push(
@@ -364,7 +377,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 1,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.coordinatorCoresLimit
 		}).component();
 
 		this.disposables.push(
@@ -384,7 +398,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 0.25,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.coordinatorMemoryRequest
 		}).component();
 
 		this.disposables.push(
@@ -404,7 +419,8 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 			readOnly: false,
 			min: 0.25,
 			inputType: 'number',
-			placeHolder: loc.loading
+			placeHolder: loc.loading,
+			ariaLabel: loc.coordinatorMemoryLimit
 		}).component();
 
 		this.disposables.push(
@@ -498,7 +514,7 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 		}).component();
 
 		const keyComponent = this.modelView.modelBuilder.text().withProps({
-			value: key,
+			value: `${key} :`,
 			CSSStyles: { ...cssStyles.text, 'margin-block-start': '0px', 'margin-block-end': '0px' }
 		}).component();
 
@@ -544,7 +560,6 @@ export class PostgresComputeAndStoragePage extends DashboardPage {
 		let scale = this._postgresModel.config?.spec.scale;
 		this.currentConfiguration.workers = scale?.workers ?? scale?.shards ?? 0;
 
-		this.workerCountBox.min = this.currentConfiguration.workers;
 		this.workerCountBox.placeHolder = '';
 		this.workerCountBox.value = this.currentConfiguration.workers.toString();
 		this.saveArgs.workers = undefined;

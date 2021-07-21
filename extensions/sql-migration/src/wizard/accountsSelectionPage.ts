@@ -9,7 +9,8 @@ import { MigrationWizardPage } from '../models/migrationWizardPage';
 import { MigrationStateModel, StateChangeEvent } from '../models/stateMachine';
 import * as constants from '../constants/strings';
 import { WIZARD_INPUT_COMPONENT_WIDTH } from './wizardController';
-import { deepClone } from '../api/utils';
+import { deepClone, findDropDownItemIndex, selectDropDownIndex } from '../api/utils';
+import { getSubscriptions } from '../api/azure';
 
 export class AccountsSelectionPage extends MigrationWizardPage {
 	private _azureAccountsDropdown!: azdata.DropDownComponent;
@@ -45,7 +46,10 @@ export class AccountsSelectionPage extends MigrationWizardPage {
 
 		this._azureAccountsDropdown = view.modelBuilder.dropDown()
 			.withProps({
-				width: WIZARD_INPUT_COMPONENT_WIDTH
+				ariaLabel: constants.ACCOUNTS_SELECTION_PAGE_TITLE,
+				width: WIZARD_INPUT_COMPONENT_WIDTH,
+				editable: true,
+				fireOnTextChange: true,
 			})
 			.withValidation((c) => {
 				if (c.value) {
@@ -71,13 +75,15 @@ export class AccountsSelectionPage extends MigrationWizardPage {
 			}).component();
 
 		this._azureAccountsDropdown.onValueChanged(async (value) => {
-			if (value.selected) {
-				const selectedAzureAccount = this.migrationStateModel.getAccount(value.index);
+			const selectedIndex = findDropDownItemIndex(this._azureAccountsDropdown, value);
+			if (selectedIndex > -1) {
+				const selectedAzureAccount = this.migrationStateModel.getAccount(selectedIndex);
 				// Making a clone of the account object to preserve the original tenants
 				this.migrationStateModel._azureAccount = deepClone(selectedAzureAccount);
 				if (this.migrationStateModel._azureAccount.properties.tenants.length > 1) {
 					this.migrationStateModel._accountTenants = selectedAzureAccount.properties.tenants;
 					this._accountTenantDropdown.values = await this.migrationStateModel.getTenantValues();
+					selectDropDownIndex(this._accountTenantDropdown, 0);
 					this._accountTenantFlexContainer.updateCssStyles({
 						'display': 'inline'
 					});
@@ -89,7 +95,7 @@ export class AccountsSelectionPage extends MigrationWizardPage {
 				this.migrationStateModel._subscriptions = undefined!;
 				this.migrationStateModel._targetSubscription = undefined!;
 				this.migrationStateModel._databaseBackup.subscription = undefined!;
-				this._azureAccountsDropdown.validate();
+				await this._azureAccountsDropdown.validate();
 			}
 		});
 
@@ -140,7 +146,10 @@ export class AccountsSelectionPage extends MigrationWizardPage {
 		}).component();
 
 		this._accountTenantDropdown = view.modelBuilder.dropDown().withProps({
-			width: WIZARD_INPUT_COMPONENT_WIDTH
+			ariaLabel: constants.AZURE_TENANT,
+			width: WIZARD_INPUT_COMPONENT_WIDTH,
+			editable: true,
+			fireOnTextChange: true,
 		}).component();
 
 		this._accountTenantDropdown.onValueChanged(value => {
@@ -148,8 +157,9 @@ export class AccountsSelectionPage extends MigrationWizardPage {
 			 * Replacing all the tenants in azure account with the tenant user has selected.
 			 * All azure requests will only run on this tenant from now on
 			 */
-			if (value.selected) {
-				this.migrationStateModel._azureAccount.properties.tenants = [this.migrationStateModel.getTenant(value.index)];
+			const selectedIndex = findDropDownItemIndex(this._accountTenantDropdown, value);
+			if (selectedIndex > -1) {
+				this.migrationStateModel._azureAccount.properties.tenants = [this.migrationStateModel.getTenant(selectedIndex)];
 				this.migrationStateModel._subscriptions = undefined!;
 				this.migrationStateModel._targetSubscription = undefined!;
 				this.migrationStateModel._databaseBackup.subscription = undefined!;
@@ -184,17 +194,26 @@ export class AccountsSelectionPage extends MigrationWizardPage {
 		} finally {
 			this._azureAccountsDropdown.loading = false;
 		}
+
+		selectDropDownIndex(this._azureAccountsDropdown, 0);
 	}
 
 	public async onPageEnter(): Promise<void> {
-		this.wizard.registerNavigationValidator(pageChangeInfo => {
-			if (this.migrationStateModel._azureAccount?.isStale === true) {
-				this.wizard.message = {
-					text: constants.ACCOUNT_STALE_ERROR(this.migrationStateModel._azureAccount)
-				};
-				return false;
+		this.wizard.registerNavigationValidator(async pageChangeInfo => {
+			try {
+				if (!this.migrationStateModel._azureAccount?.isStale) {
+					const subscriptions = await getSubscriptions(this.migrationStateModel._azureAccount);
+					if (subscriptions?.length > 0) {
+						return true;
+					}
+				}
+
+				this.wizard.message = { text: constants.ACCOUNT_STALE_ERROR(this.migrationStateModel._azureAccount) };
+			} catch (error) {
+				this.wizard.message = { text: constants.ACCOUNT_ACCESS_ERROR(this.migrationStateModel._azureAccount, error) };
 			}
-			return true;
+
+			return false;
 		});
 	}
 

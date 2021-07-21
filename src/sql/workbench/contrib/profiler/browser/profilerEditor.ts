@@ -362,8 +362,7 @@ export class ProfilerEditor extends EditorPane {
 			title: nls.localize('text', "Text"),
 			view: {
 				layout: dim => this._editor.layout(dim),
-				render: parent => parent.appendChild(editorContainer),
-				focus: () => this._editor.focus()
+				render: parent => parent.appendChild(editorContainer)
 			},
 			tabSelectedHandler: expandPanel
 		});
@@ -417,8 +416,7 @@ export class ProfilerEditor extends EditorPane {
 			title: nls.localize('details', "Details"),
 			view: {
 				layout: dim => this._detailTable.layout(dim),
-				render: parent => parent.appendChild(detailTableContainer),
-				focus: () => this._detailTable.focus()
+				render: parent => parent.appendChild(detailTableContainer)
 			},
 			tabSelectedHandler: expandPanel
 		});
@@ -445,11 +443,11 @@ export class ProfilerEditor extends EditorPane {
 		return editorContainer;
 	}
 
-	public get input(): ProfilerInput {
+	public override get input(): ProfilerInput {
 		return this._input as ProfilerInput;
 	}
 
-	public setInput(input: ProfilerInput, options?: EditorOptions): Promise<void> {
+	public override setInput(input: ProfilerInput, options?: EditorOptions): Promise<void> {
 		let savedViewState = this._savedTableViewStates.get(input);
 
 		this._profilerEditorContextKey.set(true);
@@ -491,7 +489,7 @@ export class ProfilerEditor extends EditorPane {
 		});
 	}
 
-	public clearInput(): void {
+	public override clearInput(): void {
 		this._profilerEditorContextKey.set(false);
 	}
 
@@ -615,7 +613,7 @@ export class ProfilerEditor extends EditorPane {
 		}
 	}
 
-	public focus() {
+	public override focus() {
 		this._profilerEditorContextKey.set(true);
 		super.focus();
 		let savedViewState = this._savedTableViewStates.get(this.input);

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as DOM from 'vs/base/browser/dom';
+import { localize } from 'vs/nls';
 import { EditorOptions, IEditorOpenContext } from 'vs/workbench/common/editor';
 import { EditorPane } from 'vs/workbench/browser/parts/editor/editorPane';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
@@ -16,6 +17,7 @@ import { QueryPlanView } from 'sql/workbench/contrib/queryPlan/browser/queryPlan
 export class QueryPlanEditor extends EditorPane {
 
 	public static ID: string = 'workbench.editor.queryplan';
+	public static LABEL: string = localize('queryPlanEditor', "Query Plan Editor");
 
 	private view = this._register(new QueryPlanView());
 
@@ -46,13 +48,6 @@ export class QueryPlanEditor extends EditorPane {
 	}
 
 	/**
-	 * Sets focus on this editor. Specifically, it sets the focus on the hosted text editor.
-	 */
-	public focus(): void {
-		this.view.focus();
-	}
-
-	/**
 	 * Updates the internal variable keeping track of the editor's size, and re-calculates the sash position.
 	 * To be called when the container of this editor changes size.
 	 */
@@ -60,7 +55,7 @@ export class QueryPlanEditor extends EditorPane {
 		this.view.layout(dimension);
 	}
 
-	public async setInput(input: QueryPlanInput, options: EditorOptions, context: IEditorOpenContext): Promise<void> {
+	public override async setInput(input: QueryPlanInput, options: EditorOptions, context: IEditorOpenContext): Promise<void> {
 		if (this.input instanceof QueryPlanInput && this.input.matches(input)) {
 			return Promise.resolve(undefined);
 		}
@@ -71,7 +66,7 @@ export class QueryPlanEditor extends EditorPane {
 		this.view.showPlan(input.planXml!);
 	}
 
-	public dispose(): void {
+	public override dispose(): void {
 		super.dispose();
 	}
 }

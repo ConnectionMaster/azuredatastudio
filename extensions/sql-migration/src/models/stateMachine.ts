@@ -58,10 +58,9 @@ export enum NetworkContainerType {
 export interface DatabaseBackupModel {
 	migrationMode: MigrationMode;
 	networkContainerType: NetworkContainerType;
-	storageKey: string;
 	networkShare: NetworkShare;
 	subscription: azureResource.AzureResourceSubscription;
-	blob: Blob;
+	blobs: Blob[];
 }
 
 export interface NetworkShare {
@@ -70,12 +69,14 @@ export interface NetworkShare {
 	password: string;
 	resourceGroup: azureResource.AzureResourceResourceGroup;
 	storageAccount: StorageAccount;
+	storageKey: string;
 }
 
 export interface Blob {
 	resourceGroup: azureResource.AzureResourceResourceGroup;
 	storageAccount: StorageAccount;
 	blobContainer: azureResource.BlobContainer;
+	storageKey: string;
 }
 
 export interface Model {
@@ -121,6 +122,7 @@ export class MigrationStateModel implements Model, vscode.Disposable {
 	public _targetDatabaseNames!: string[];
 	public _serverDatabases!: string[];
 
+	public _sqlMigrationServiceResourceGroup!: string;
 	public _sqlMigrationService!: SqlMigrationService;
 	public _sqlMigrationServices!: SqlMigrationService[];
 	public _nodeNames!: string[];
@@ -144,7 +146,7 @@ export class MigrationStateModel implements Model, vscode.Disposable {
 		this._currentState = State.INIT;
 		this._databaseBackup = {} as DatabaseBackupModel;
 		this._databaseBackup.networkShare = {} as NetworkShare;
-		this._databaseBackup.blob = {} as Blob;
+		this._databaseBackup.blobs = [];
 	}
 
 	public get sourceConnectionId(): string {
@@ -174,30 +176,17 @@ export class MigrationStateModel implements Model, vscode.Disposable {
 		const assessmentResults = await this.migrationService.getAssessments(
 			ownerUri
 		);
-
 		this._serverDatabases = await (await azdata.connection.listDatabases(this.sourceConnectionId)).filter((name) => !excludeDbs.includes(name));
-		const serverLevelAssessments: mssql.SqlMigrationAssessmentResultItem[] = [];
-		const databaseLevelAssessments = this._serverDatabases.map(db => {
+		const dbAssessments = assessmentResults?.assessmentResult.databases.filter(d => !excludeDbs.includes(d.name)).map(d => {
 			return {
-				name: db,
-				issues: <mssql.SqlMigrationAssessmentResultItem[]>[]
+				name: d.name,
+				issues: d.items.filter(i => i.appliesToMigrationTargetPlatform === MigrationTargetType.SQLMI) ?? []
 			};
 		});
 
-		assessmentResults?.items.forEach((item) => {
-			if (item.appliesToMigrationTargetPlatform === MigrationTargetType.SQLMI) {
-				const dbIndex = this._serverDatabases.indexOf(item.databaseName);
-				if (dbIndex === -1) {
-					serverLevelAssessments.push(item);
-				} else {
-					databaseLevelAssessments[dbIndex].issues.push(item);
-				}
-			}
-		});
-
 		this._assessmentResults = {
-			issues: serverLevelAssessments,
-			databaseAssessments: databaseLevelAssessments
+			issues: assessmentResults?.assessmentResult.items?.filter(i => i.appliesToMigrationTargetPlatform === MigrationTargetType.SQLMI) ?? [],
+			databaseAssessments: dbAssessments! ?? []
 		};
 
 		return this._assessmentResults;
@@ -667,38 +656,38 @@ export class MigrationStateModel implements Model, vscode.Disposable {
 				scope: this._targetServerInstance.id
 			}
 		};
-		switch (this._databaseBackup.networkContainerType) {
-			case NetworkContainerType.BLOB_CONTAINER:
-				requestBody.properties.backupConfiguration = {
-					targetLocation: undefined!,
-					sourceLocation: {
-						azureBlob: {
-							storageAccountResourceId: this._databaseBackup.blob.storageAccount.id,
-							accountKey: this._databaseBackup.storageKey,
-							blobContainerName: this._databaseBackup.blob.blobContainer.name
-						}
-					}
-				};
-				break;
-			case NetworkContainerType.NETWORK_SHARE:
-				requestBody.properties.backupConfiguration = {
-					targetLocation: {
-						storageAccountResourceId: this._databaseBackup.networkShare.storageAccount.id,
-						accountKey: this._databaseBackup.storageKey,
-					},
-					sourceLocation: {
-						fileShare: {
-							path: this._databaseBackup.networkShare.networkShareLocation,
-							username: this._databaseBackup.networkShare.windowsUser,
-							password: this._databaseBackup.networkShare.password,
-						}
-					}
-				};
-				break;
-		}
 
 		for (let i = 0; i < this._migrationDbs.length; i++) {
 			try {
+				switch (this._databaseBackup.networkContainerType) {
+					case NetworkContainerType.BLOB_CONTAINER:
+						requestBody.properties.backupConfiguration = {
+							targetLocation: undefined!,
+							sourceLocation: {
+								azureBlob: {
+									storageAccountResourceId: this._databaseBackup.blobs[i].storageAccount.id,
+									accountKey: this._databaseBackup.blobs[i].storageKey,
+									blobContainerName: this._databaseBackup.blobs[i].blobContainer.name
+								}
+							}
+						};
+						break;
+					case NetworkContainerType.NETWORK_SHARE:
+						requestBody.properties.backupConfiguration = {
+							targetLocation: {
+								storageAccountResourceId: this._databaseBackup.networkShare.storageAccount.id,
+								accountKey: this._databaseBackup.networkShare.storageKey,
+							},
+							sourceLocation: {
+								fileShare: {
+									path: this._databaseBackup.networkShare.networkShareLocation,
+									username: this._databaseBackup.networkShare.windowsUser,
+									password: this._databaseBackup.networkShare.password,
+								}
+							}
+						};
+						break;
+				}
 				requestBody.properties.sourceDatabaseName = this._migrationDbs[i];
 				const response = await startDatabaseMigration(
 					this._azureAccount,
@@ -723,8 +712,9 @@ export class MigrationStateModel implements Model, vscode.Disposable {
 					vscode.window.showInformationMessage(localize("sql.migration.starting.migration.message", 'Starting migration for database {0} to {1} - {2}', this._migrationDbs[i], this._targetServerInstance.name, this._targetDatabaseNames[i]));
 				}
 			} catch (e) {
+				vscode.window.showErrorMessage(
+					localize('sql.migration.starting.migration.error', "An error occurred while starting the migration: '{0}'", e.message));
 				console.log(e);
-				vscode.window.showInformationMessage(e);
 			}
 
 			vscode.commands.executeCommand('sqlmigration.refreshMigrationTiles');

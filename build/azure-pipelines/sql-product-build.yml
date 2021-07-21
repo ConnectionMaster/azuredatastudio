@@ -7,7 +7,7 @@ resources:
 jobs:
 - job: Compile
   pool:
-    vmImage: 'Ubuntu-16.04'
+    vmImage: 'Ubuntu-18.04'
   container: linux-x64
   steps:
   - script: |
@@ -15,7 +15,7 @@ jobs:
       echo "##vso[build.addbuildtag]$(VSCODE_QUALITY)"
     displayName: Add Quality Build Tag
   - template: sql-product-compile.yml
-  timeoutInMinutes: 90
+  timeoutInMinutes: 120
 
 - job: macOS
   condition: and(succeeded(), eq(variables['VSCODE_BUILD_MACOS'], 'true'), ne(variables['VSCODE_QUALITY'], 'saw'))
@@ -40,38 +40,14 @@ jobs:
 - job: Linux
   condition: and(succeeded(), eq(variables['VSCODE_BUILD_LINUX'], 'true'))
   pool:
-    vmImage: 'Ubuntu-16.04'
+    vmImage: 'Ubuntu-18.04'
   container: linux-x64
   dependsOn:
   - Compile
   steps:
   - template: linux/sql-product-build-linux.yml
     parameters:
-      extensionsToUnitTest: ["admin-tool-ext-win", "agent", "azdata", "azurecore", "cms", "dacpac", "import", "schema-compare", "notebook", "resource-deployment", "machine-learning", "sql-database-projects", "data-workspace"]
-  timeoutInMinutes: 90
-
-- job: LinuxWeb
-  condition: and(succeeded(), eq(variables['VSCODE_BUILD_WEB'], 'true'), ne(variables['VSCODE_QUALITY'], 'saw'))
-  pool:
-    vmImage: 'Ubuntu-16.04'
-  container: linux-x64
-  variables:
-    VSCODE_ARCH: x64
-  dependsOn:
-  - Compile
-  steps:
-  - template: web/sql-product-build-web.yml
-  timeoutInMinutes: 90
-
-- job: Docker
-  condition: and(succeeded(), eq(variables['VSCODE_BUILD_DOCKER'], 'true'))
-  pool:
-    vmImage: 'Ubuntu-16.04'
-  container: linux-x64
-  dependsOn:
-  - Linux
-  steps:
-  - template: docker/sql-product-build-docker.yml
+      extensionsToUnitTest: ["admin-tool-ext-win", "agent", "azcli", "azdata", "azurecore", "cms", "dacpac", "data-workspace", "import", "machine-learning", "notebook", "resource-deployment", "schema-compare", "sql-database-projects"]
   timeoutInMinutes: 90
 
 - job: Windows
@@ -98,14 +74,12 @@ jobs:
 - job: Release
   condition: and(succeeded(), or(eq(variables['VSCODE_RELEASE'], 'true'), and(eq(variables['VSCODE_QUALITY'], 'insider'), eq(variables['Build.Reason'], 'Schedule'))))
   pool:
-    vmImage: 'Ubuntu-16.04'
+    vmImage: 'Ubuntu-18.04'
   dependsOn:
   - macOS
   - Linux
-  # - Docker
   - Windows
   - Windows_Test
-  - LinuxWeb
   - macOS_Signing
   steps:
   - template: sql-release.yml

@@ -138,11 +138,16 @@ export async function spawn(options: SpawnOptions): Promise<Code> {
 		'--disable-telemetry',
 		'--no-cached-data',
 		'--disable-updates',
+		'--disable-keytar',
 		'--disable-crash-reporter',
 		`--extensions-dir=${options.extensionsPath}`,
 		`--user-data-dir=${options.userDataDir}`,
 		'--driver', handle
 	];
+
+	if (process.platform === 'linux') {
+		args.push('--disable-gpu'); // Linux has trouble in VMs to render properly with GPU enabled
+	}
 
 	if (options.remote) {
 		// Replace workspace path with URI
@@ -198,7 +203,7 @@ async function copyExtension(extensionsPath: string, extId: string): Promise<voi
 	const dest = path.join(extensionsPath, extId);
 	if (!fs.existsSync(dest)) {
 		const orig = path.join(repoPath, 'extensions', extId);
-		await new Promise((c, e) => ncp(orig, dest, err => err ? e(err) : c()));
+		await new Promise<void>((c, e) => ncp(orig, dest, err => err ? e(err) : c()));
 	}
 }
 
@@ -294,12 +299,15 @@ export class Code {
 		const windowId = await this.getActiveWindowId();
 		accept = accept || (result => textContent !== undefined ? textContent === result : !!result);
 
-		return await poll(
-			() => this.driver.getElements(windowId, selector).then(els => els.length > 0 ? Promise.resolve(els[0].textContent) : Promise.reject(new Error('Element not found for textContent'))),
+		// {{SQL CARBON EDIT}} Print out found element
+		const element = await poll(
+			() => this.driver.getElements(windowId, selector).then(els => els.length > 0 ? Promise.resolve(els[0]) : Promise.reject(new Error('Element not found for textContent'))),
 			s => accept!(typeof s === 'string' ? s : ''),
 			`get text content '${selector}'`,
 			retryCount
 		);
+		this.logger.log(`got text content element ${JSON.stringify(element)}`);
+		return element.textContent;
 	}
 
 	async waitAndClick(selector: string, xoffset?: number, yoffset?: number): Promise<void> {
@@ -319,12 +327,18 @@ export class Code {
 
 	async waitForElements(selector: string, recursive: boolean, accept: (result: IElement[]) => boolean = result => result.length > 0): Promise<IElement[]> {
 		const windowId = await this.getActiveWindowId();
-		return await poll(() => this.driver.getElements(windowId, selector, recursive), accept, `get elements '${selector}'`);
+		// {{SQL CARBON EDIT}} Print out found element
+		const elements = await poll(() => this.driver.getElements(windowId, selector, recursive), accept, `get elements '${selector}'`);
+		this.logger.log(`got elements ${elements.map(element => JSON.stringify(element)).join('\n')}`);
+		return elements;
 	}
 
 	async waitForElement(selector: string, accept: (result: IElement | undefined) => boolean = result => !!result, retryCount: number = 200): Promise<IElement> {
 		const windowId = await this.getActiveWindowId();
-		return await poll<IElement>(() => this.driver.getElements(windowId, selector).then(els => els[0]), accept, `get element '${selector}'`, retryCount);
+		// {{SQL CARBON EDIT}} Print out found element
+		const element = await poll<IElement>(() => this.driver.getElements(windowId, selector).then(els => els[0]), accept, `get element '${selector}'`, retryCount);
+		this.logger.log(`got element ${JSON.stringify(element)}`);
+		return element;
 	}
 
 	async waitForElementGone(selector: string, accept: (result: IElement | undefined) => boolean = result => !result, retryCount: number = 200): Promise<IElement> {

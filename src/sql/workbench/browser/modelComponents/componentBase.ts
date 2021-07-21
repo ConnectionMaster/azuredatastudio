@@ -56,6 +56,10 @@ export abstract class ComponentBase<TPropertyBag extends azdata.ComponentPropert
 			this.modelStore.registerComponent(this);
 			this._validations.push(() => this.modelStore.validate(this));
 		}
+		this.fireEvent({
+			eventType: ComponentEventType.onComponentLoaded,
+			args: undefined
+		});
 	}
 
 	abstract ngAfterViewInit(): void;
@@ -351,7 +355,7 @@ export abstract class ContainerBase<T, TPropertyBag extends azdata.ComponentProp
 		this.validate().catch(onUnexpectedError);
 	}
 
-	public setProperties(properties: { [key: string]: any; }): void {
+	public override setProperties(properties: { [key: string]: any; }): void {
 		super.setProperties(properties);
 		this.items.forEach(item => {
 			let component = this.modelStore.getComponent(item.descriptor.id);
@@ -362,7 +366,7 @@ export abstract class ContainerBase<T, TPropertyBag extends azdata.ComponentProp
 		});
 	}
 
-	public layout(): void {
+	public override layout(): void {
 		super.layout();
 		if (this._componentWrappers) {
 			this._componentWrappers.forEach(wrapper => {
@@ -370,8 +374,6 @@ export abstract class ContainerBase<T, TPropertyBag extends azdata.ComponentProp
 			});
 		}
 	}
-
-	abstract setLayout(layout: any): void;
 
 	public setItemLayout(componentDescriptor: IComponentDescriptor, config: any): void {
 		if (!componentDescriptor) {

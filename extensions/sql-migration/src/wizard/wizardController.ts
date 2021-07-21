@@ -15,7 +15,6 @@ import { AccountsSelectionPage } from './accountsSelectionPage';
 import { IntergrationRuntimePage } from './integrationRuntimePage';
 import { SummaryPage } from './summaryPage';
 import { MigrationModePage } from './migrationModePage';
-import { SqlSourceConfigurationPage } from './sqlSourceConfigurationPage';
 
 export const WIZARD_INPUT_COMPONENT_WIDTH = '600px';
 export class WizardController {
@@ -40,14 +39,12 @@ export class WizardController {
 		const skuRecommendationPage = new SKURecommendationPage(wizard, stateModel);
 		const migrationModePage = new MigrationModePage(wizard, stateModel);
 		const azureAccountsPage = new AccountsSelectionPage(wizard, stateModel);
-		const sourceConfigurationPage = new SqlSourceConfigurationPage(wizard, stateModel);
 		const databaseBackupPage = new DatabaseBackupPage(wizard, stateModel);
 		const integrationRuntimePage = new IntergrationRuntimePage(wizard, stateModel);
 		const summaryPage = new SummaryPage(wizard, stateModel);
 
 		const pages: MigrationWizardPage[] = [
 			azureAccountsPage,
-			sourceConfigurationPage,
 			skuRecommendationPage,
 			migrationModePage,
 			databaseBackupPage,
@@ -97,11 +94,27 @@ export function createInformationRow(view: azdata.ModelView, label: string, valu
 			})
 		.withItems(
 			[
-				createLabelTextComponent(view, label),
-				createTextCompononent(view, value)
+				createLabelTextComponent(view, label,
+					{
+						'margin': '0px',
+						'width': '300px',
+						'font-size': '13px',
+						'line-height': '24px'
+					}
+				),
+				createTextCompononent(view, value,
+					{
+						'margin': '0px',
+						'width': '300px',
+						'font-size': '13px',
+						'line-height': '24px'
+					}
+				)
 			],
 			{
-				CSSStyles: { 'margin-right': '5px' }
+				CSSStyles: {
+					'margin-right': '5px'
+				}
 			})
 		.component();
 }
@@ -117,13 +130,13 @@ export function createHeadingTextComponent(view: azdata.ModelView, value: string
 
 
 export function createLabelTextComponent(view: azdata.ModelView, value: string, styles: { [key: string]: string; } = { 'width': '300px' }): azdata.TextComponent {
-	const component = createTextCompononent(view, value);
-	component.updateCssStyles(styles);
+	const component = createTextCompononent(view, value, styles);
 	return component;
 }
 
-export function createTextCompononent(view: azdata.ModelView, value: string): azdata.TextComponent {
+export function createTextCompononent(view: azdata.ModelView, value: string, styles: { [key: string]: string; } = { 'width': '300px' }): azdata.TextComponent {
 	return view.modelBuilder.text().withProps({
-		value: value
+		value: value,
+		CSSStyles: styles
 	}).component();
 }

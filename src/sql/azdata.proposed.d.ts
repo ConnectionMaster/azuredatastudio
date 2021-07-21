@@ -9,6 +9,19 @@ import * as vscode from 'vscode';
 
 declare module 'azdata' {
 
+	export namespace queryeditor {
+		/**
+		 * Opens an untitled text document. The editor will prompt the user for a file
+		 * path when the document is to be saved. The `options` parameter allows to
+		 * specify the *content* of the document.
+		 *
+		 * @param options Options to control how the document will be created.
+		 * @param providerId Optional provider ID this editor will be associated with. Defaults to MSSQL.
+		 * @return A promise that resolves to a [document](#QueryDocument).
+		 */
+		export function openQueryDocument(options?: { content?: string; }, providerId?: string): Thenable<QueryDocument>;
+	}
+
 	export namespace nb {
 		export interface NotebookDocument {
 			/**
@@ -260,7 +273,8 @@ declare module 'azdata' {
 
 
 	export enum DeclarativeDataType {
-		component = 'component'
+		component = 'component',
+		menu = 'menu'
 	}
 
 	export type DeclarativeTableRowSelectedEvent = {
@@ -274,6 +288,12 @@ declare module 'azdata' {
 		 * will clear the filter
 		 */
 		setFilter(rowIndexes: number[] | undefined): void;
+
+		/**
+		 * Sets the data values.
+		 * @param v The new data values
+		 */
+		setDataValues(v: DeclarativeTableCellValue[][]): Promise<void>;
 	}
 
 	/*
@@ -372,7 +392,8 @@ declare module 'azdata' {
 
 	export interface DeclarativeTableProperties {
 		/**
-		 * dataValues will only be used if data is an empty array
+		 * dataValues will only be used if data is an empty array.
+		 * To set the dataValues, it is recommended to use the setDataValues method that returns a promise.
 		 */
 		dataValues?: DeclarativeTableCellValue[][];
 
@@ -380,13 +401,30 @@ declare module 'azdata' {
 		 * Gets a boolean value determines whether the row selection is enabled. Default value is false.
 		 */
 		enableRowSelection?: boolean;
+
+		/**
+		 * Gets or sets the selected row number of the table. -1 means to no selected row.
+		 */
+		selectedRow?: number;
+	}
+
+
+	export interface DeclarativeTableMenuCellValue {
+		/**
+		 * commands for the menu. Use an array for a group and menu separators will be added.
+		 */
+		commands: (string | string[])[];
+		/**
+		 * context that will be passed to the commands.
+		 */
+		context: { [key: string]: string | boolean | number } | string | boolean | number | undefined
 	}
 
 	export interface DeclarativeTableCellValue {
 		/**
 		 * The cell value
 		 */
-		value: string | number | boolean | Component;
+		value: string | number | boolean | Component | DeclarativeTableMenuCellValue;
 		/**
 		 * The aria-label of the cell
 		 */
@@ -534,6 +572,19 @@ declare module 'azdata' {
 	export interface SliderComponent extends Component, SliderComponentProperties {
 		onChanged: vscode.Event<number>;
 		onInput: vscode.Event<number>;
+	}
+
+	/**
+	 * The heading levels an HTML heading element can be.
+	 */
+	export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
+	export interface TextComponentProperties {
+		/**
+		 * The heading level for this component - if set the text component will be created as an h#
+		 * HTML element with this value being the #.
+		 */
+		headingLevel?: HeadingLevel;
 	}
 
 	export namespace nb {
@@ -809,12 +860,24 @@ declare module 'azdata' {
 		 * Specifies whether this is a secondary button. Default value is false.
 		 */
 		secondary?: boolean;
+
+		/**
+		 * The file type filter used for the file input dialog box - only used when the button type is File
+		 */
+		fileType?: string
 	}
 
 	export enum ButtonType {
 		File = 'File',
 		Normal = 'Normal',
 		Informational = 'Informational'
+	}
+
+	export interface InputBoxProperties {
+		/**
+		 * The maximum number of characters allowed in the input box.
+		 */
+		maxLength?: number;
 	}
 
 	export namespace workspace {
@@ -848,6 +911,15 @@ declare module 'azdata' {
 		 * Append data to an existing table data.
 		 */
 		appendData(data: any[][]): Thenable<void>;
+	}
+
+	export interface LinkArea {
+		/*
+		* Accessibility information used when screen reader interacts with this link.
+		* Generally, a link has no need to set the `role` of the accessibilityInformation;
+		* but it is exposed for situations that may require it.
+		*/
+		accessibilityInformation?: vscode.AccessibilityInformation
 	}
 
 	export interface IconColumnCellValue {
@@ -943,5 +1015,12 @@ declare module 'azdata' {
 	 */
 	export interface VisualizationOptions {
 		type: VisualizationType;
+	}
+
+	export interface PropertiesContainerComponentProperties {
+		/**
+		 * Whether to show the button that will hide/show the content of the container. Default value is false.
+		 */
+		showToggleButton?: boolean;
 	}
 }

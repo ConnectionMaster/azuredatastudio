@@ -165,7 +165,7 @@ export class ChartView extends Disposable implements IPanelView {
 		return option.map(o => altNameHash[o] || o);
 	}
 
-	public dispose() {
+	public override dispose() {
 		dispose(this.optionDisposables);
 		super.dispose();
 	}
@@ -204,9 +204,6 @@ export class ChartView extends Disposable implements IPanelView {
 		if (this.insight) {
 			this.insight.layout(new DOM.Dimension(DOM.getContentWidth(this.insightContainer!), DOM.getContentHeight(this.insightContainer!)));
 		}
-	}
-
-	focus(): void {
 	}
 
 	public set queryRunner(runner: QueryRunner) {

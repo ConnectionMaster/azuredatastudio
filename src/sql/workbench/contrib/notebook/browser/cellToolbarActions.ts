@@ -52,17 +52,9 @@ export class EditCellAction extends ToggleableAction {
 		this.toggle(value);
 	}
 
-	public run(context: CellContext): Promise<boolean> {
-		let self = this;
-		return new Promise<boolean>((resolve, reject) => {
-			try {
-				self.editMode = !self.editMode;
-				context.cell.isEditMode = self.editMode;
-				resolve(true);
-			} catch (e) {
-				reject(e);
-			}
-		});
+	public override async run(context: CellContext): Promise<void> {
+		this.editMode = !this.editMode;
+		context.cell.isEditMode = this.editMode;
 	}
 }
 
@@ -244,7 +236,7 @@ export class ClearCellOutputAction extends CellActionBase {
 		super(id, label, undefined, notificationService);
 	}
 
-	public canRun(context: CellContext): boolean {
+	public override canRun(context: CellContext): boolean {
 		return context.cell && context.cell.cellType === CellTypes.Code;
 	}
 
@@ -278,7 +270,7 @@ export class RunCellsAction extends CellActionBase {
 		super(id, label, undefined, notificationService);
 	}
 
-	public canRun(context: CellContext): boolean {
+	public override canRun(context: CellContext): boolean {
 		return context.cell && context.cell.cellType === CellTypes.Code;
 	}
 
@@ -315,7 +307,7 @@ export class CollapseCellAction extends CellActionBase {
 		super(id, label, undefined, notificationService);
 	}
 
-	public canRun(context: CellContext): boolean {
+	public override canRun(context: CellContext): boolean {
 		return context.cell && context.cell.cellType === CellTypes.Code;
 	}
 
@@ -358,13 +350,12 @@ export class ToggleMoreActions extends Action {
 		super(ToggleMoreActions.ID, ToggleMoreActions.LABEL, ToggleMoreActions.ICON);
 	}
 
-	run(context: StandardKeyboardEvent): Promise<boolean> {
+	override async run(context: StandardKeyboardEvent): Promise<void> {
 		this._contextMenuService.showContextMenu({
 			getAnchor: () => context.target,
 			getActions: () => this._actions,
 			getActionsContext: () => this._context
 		});
-		return Promise.resolve(true);
 	}
 }
 
@@ -377,7 +368,7 @@ export class ParametersCellAction extends CellActionBase {
 		super(id, label, undefined, notificationService);
 	}
 
-	public canRun(context: CellContext): boolean {
+	public override canRun(context: CellContext): boolean {
 		return context.cell?.cellType === CellTypes.Code;
 	}
 

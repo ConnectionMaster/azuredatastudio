@@ -44,10 +44,6 @@ class MessagesView extends Disposable implements IPanelView {
 		this.messagePanel.layout(dimension);
 	}
 
-	focus(): void {
-		this.messagePanel.focus();
-	}
-
 	public clear() {
 		this.messagePanel.clear();
 	}
@@ -81,10 +77,6 @@ class ResultsView extends Disposable implements IPanelView {
 		this.container.style.width = `${dimension.width}px`;
 		this.container.style.height = `${dimension.height}px`;
 		this.gridPanel.layout(dimension);
-	}
-
-	focus(): void {
-		this.gridPanel.focus();
 	}
 
 	public clear() {
@@ -201,7 +193,7 @@ export class QueryResultsView extends Disposable {
 	private hasResults(runner: QueryRunner): boolean {
 		let hasResults = false;
 		for (const batch of runner.batchSets) {
-			if (batch.resultSetSummaries.length > 0) {
+			if (batch.resultSetSummaries?.length > 0) {
 				hasResults = true;
 				break;
 			}
@@ -238,9 +230,9 @@ export class QueryResultsView extends Disposable {
 				this._panelView.showTab(this.messagesTab.identifier);
 			}
 			// Currently we only need to support visualization options for the first result set.
-			if (runner.batchSets[0]?.resultSetSummaries[0]?.visualization) {
-				const batchSet = runner.batchSets[0];
-				const resultSet = batchSet.resultSetSummaries[0];
+			const batchSet = runner.batchSets[0];
+			const resultSet = batchSet?.resultSetSummaries?.[0];
+			if (resultSet?.visualization) {
 				this.chartData({
 					resultId: batchSet.id,
 					batchId: resultSet.batchId
@@ -420,7 +412,7 @@ export class QueryResultsView extends Disposable {
 		this.dynamicModelViewTabs = [];
 	}
 
-	public dispose() {
+	public override dispose() {
 		this.runnerDisposables.dispose();
 		this.runnerDisposables = new DisposableStore();
 		super.dispose();

@@ -3,7 +3,10 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CategoryValue, DropDownComponent } from 'azdata';
 import { DAYS, HRS, MINUTE, SEC } from '../constants/strings';
+import { AdsMigrationStatus } from '../dialog/migrationStatus/migrationStatusDialogModel';
+import { MigrationContext } from '../models/migrationLocalStorage';
 
 export function deepClone<T>(obj: T): T {
 	if (!obj || typeof obj !== 'object') {
@@ -82,4 +85,106 @@ export function convertTimeDifferenceToDuration(startTime: Date, endTime: Date):
 	else {
 		return DAYS(parseFloat(days));
 	}
+}
+
+export function filterMigrations(databaseMigrations: MigrationContext[], statusFilter: string, databaseNameFilter?: string): MigrationContext[] {
+	let filteredMigration: MigrationContext[] = [];
+	if (statusFilter === AdsMigrationStatus.ALL) {
+		filteredMigration = databaseMigrations;
+	} else if (statusFilter === AdsMigrationStatus.ONGOING) {
+		filteredMigration = databaseMigrations.filter((value) => {
+			const status = value.migrationContext.properties.migrationStatus;
+			const provisioning = value.migrationContext.properties.provisioningState;
+			return status === 'InProgress' || status === 'Creating' || provisioning === 'Creating';
+		});
+	} else if (statusFilter === AdsMigrationStatus.SUCCEEDED) {
+		filteredMigration = databaseMigrations.filter((value) => {
+			const status = value.migrationContext.properties.migrationStatus;
+			return status === 'Succeeded';
+		});
+	} else if (statusFilter === AdsMigrationStatus.FAILED) {
+		filteredMigration = databaseMigrations.filter((value) => {
+			const status = value.migrationContext.properties.migrationStatus;
+			const provisioning = value.migrationContext.properties.provisioningState;
+			return status === 'Failed' || provisioning === 'Failed';
+		});
+	} else if (statusFilter === AdsMigrationStatus.COMPLETING) {
+		filteredMigration = databaseMigrations.filter((value) => {
+			const status = value.migrationContext.properties.migrationStatus;
+			return status === 'Completing';
+		});
+	}
+	if (databaseNameFilter) {
+		filteredMigration = filteredMigration.filter((value) => {
+			return value.migrationContext.name.toLowerCase().includes(databaseNameFilter.toLowerCase());
+		});
+	}
+	return filteredMigration;
+}
+
+export function convertByteSizeToReadableUnit(size: number): string {
+	const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+	for (let i = 1; i < units.length; i++) {
+		const higherUnit = size / 1024;
+		if (higherUnit < 0.1) {
+			return `${size.toFixed(2)} ${units[i - 1]}`;
+		}
+		size = higherUnit;
+	}
+	return size.toString();
+}
+
+export function convertIsoTimeToLocalTime(isoTime: string): Date {
+	let isoDate = new Date(isoTime);
+	return new Date(isoDate.getTime() + (isoDate.getTimezoneOffset() * 60000));
+}
+
+export type SupportedAutoRefreshIntervals = -1 | 15000 | 30000 | 60000 | 180000 | 300000;
+
+export function selectDropDownIndex(dropDown: DropDownComponent, index: number): void {
+	if (index >= 0 && dropDown.values && index <= dropDown.values.length - 1) {
+		const value = dropDown.values[index];
+		dropDown.value = value as CategoryValue;
+	}
+}
+
+export function findDropDownItemIndex(dropDown: DropDownComponent, value: string): number {
+	if (dropDown.values) {
+		return dropDown.values.findIndex((v: any) =>
+			(v as CategoryValue)?.displayName?.toLowerCase() === value?.toLowerCase());
+	}
+
+	return -1;
+}
+
+export function debounce(delay: number): Function {
+	return decorate((fn, key) => {
+		const timerKey = `$debounce$${key}`;
+
+		return function (this: any, ...args: any[]) {
+			clearTimeout(this[timerKey]);
+			this[timerKey] = setTimeout(() => fn.apply(this, args), delay);
+		};
+	});
+}
+
+export function decorate(decorator: (fn: Function, key: string) => Function): Function {
+	return (_target: any, key: string, descriptor: any) => {
+		let fnKey: string | null = null;
+		let fn: Function | null = null;
+
+		if (typeof descriptor.value === 'function') {
+			fnKey = 'value';
+			fn = descriptor.value;
+		} else if (typeof descriptor.get === 'function') {
+			fnKey = 'get';
+			fn = descriptor.get;
+		}
+
+		if (!fn || !fnKey) {
+			throw new Error('not supported');
+		}
+
+		descriptor[fnKey] = decorator(fn, key);
+	};
 }

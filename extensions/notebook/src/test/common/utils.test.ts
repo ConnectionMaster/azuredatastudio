@@ -317,7 +317,9 @@ describe('Utils Tests', function () {
 			isCloud: false,
 			azureVersion: -1,
 			osVersion: '',
-			options: {}
+			options: {},
+			cpuCount: -1,
+			physicalMemoryInMb: -1
 		};
 		it('empty endpoints does not error', () => {
 			const serverInfo = Object.assign({}, baseServerInfo);
@@ -459,7 +461,7 @@ describe('Utils Tests', function () {
 
 	describe('getPinnedNotebooks', function (): void {
 		it('Should NOT have any pinned notebooks', async function (): Promise<void> {
-			let pinnedNotebooks: utils.IBookNotebook[] = utils.getPinnedNotebooks();
+			let pinnedNotebooks: utils.IPinnedNotebook[] = utils.getPinnedNotebooks();
 
 			should(pinnedNotebooks.length).equal(0, 'Should not have any pinned notebooks');
 		});

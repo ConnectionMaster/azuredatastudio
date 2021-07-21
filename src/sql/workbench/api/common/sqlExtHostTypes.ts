@@ -244,7 +244,8 @@ export enum ComponentEventType {
 	onComponentCreated,
 	onCellAction,
 	onEnterKeyPressed,
-	onInput
+	onInput,
+	onComponentLoaded
 }
 
 export interface IComponentEventArgs {
@@ -387,7 +388,8 @@ export enum DeclarativeDataType {
 	category = 'category',
 	boolean = 'boolean',
 	editableCategory = 'editableCategory',
-	component = 'component'
+	component = 'component',
+	menu = 'menu'
 }
 
 export enum CardType {
